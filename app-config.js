@@ -1,9 +1,9 @@
 window.KW_PLAYER_CONFIG = window.KW_PLAYER_CONFIG || {
-  apiBaseUrl: "https://impalastreamer-4926a59bda8a.herokuapp.com",
+  apiBaseUrl: "https://partner-impala-110e6d1eb701.herokuapp.com",
   liveStreamApiBaseUrl: "https://impala-livestream-0225c97b1e97.herokuapp.com",
   localLiveStreamApiBaseUrl: "https://impala-livestream-0225c97b1e97.herokuapp.com",
   authStorageKey: "impalaStreamer.authSession",
-  playlistStoragePrefix: "partnerImpala",
+  playlistStoragePrefix: "impalaStreamer",
   instanceStorageId: "india1111",
   brandName: "Impala Streamer",
   appVersion: "1.0.0",
