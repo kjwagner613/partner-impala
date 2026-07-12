@@ -24,6 +24,8 @@ export async function buildLibraryIndex({ s3Client, scope }) {
   const output = createWriteStream(temporaryPath, { encoding: "utf8" });
   let continuationToken;
   let count = 0;
+  const videoTitleKeys = new Set();
+  const excludedPrefixes = (scope.excludedPrefixes || []).map(normalizeScanPrefix).filter(Boolean);
 
   try {
     do {
@@ -35,11 +37,17 @@ export async function buildLibraryIndex({ s3Client, scope }) {
 
       for (const object of page.Contents || []) {
         const objectKey = String(object.Key || "");
-        if (!isMediaObjectKey(objectKey)) {
+        if (!isMediaObjectKey(objectKey) || isExcludedObjectKey(objectKey, scope.prefix, excludedPrefixes)) {
           continue;
         }
 
         const metadata = parseMediaPath(objectKey, scope.prefix);
+        const videoTitleKey = scope.name === "video"
+          ? getVideoTitleKey(objectKey, scope.prefix, metadata)
+          : "";
+        if (videoTitleKey) {
+          videoTitleKeys.add(videoTitleKey);
+        }
         const record = {
           objectKey,
           artist: metadata.artist,
@@ -80,6 +88,7 @@ export async function buildLibraryIndex({ s3Client, scope }) {
       bucket: scope.bucket,
       indexKey: scope.indexKey,
       records: count,
+      titleCount: scope.name === "video" ? videoTitleKeys.size : null,
       etag: result.ETag || null,
       generatedAt: uploadedAt
     };
@@ -112,4 +121,22 @@ function parseMediaPath(objectKey, scanPrefix) {
   }
 
   return { artist, album, title: title || withoutExtension || fileName };
+}
+
+function getVideoTitleKey(objectKey, scanPrefix, metadata) {
+  const relativeKey = objectKey.startsWith(scanPrefix) ? objectKey.slice(scanPrefix.length) : objectKey;
+  const segments = relativeKey.split("/").filter(Boolean);
+
+  if (segments.length > 1) {
+    return segments[0].trim().toLowerCase();
+  }
+
+  return String(metadata.title || segments[0] || objectKey).trim().toLowerCase();
+}
+
+function isExcludedObjectKey(objectKey, scanPrefix, excludedPrefixes) {
+  const relativeKey = objectKey.startsWith(scanPrefix) ? objectKey.slice(scanPrefix.length) : objectKey;
+  return excludedPrefixes.some((prefix) => (
+    objectKey.startsWith(prefix) || relativeKey.startsWith(prefix)
+  ));
 }

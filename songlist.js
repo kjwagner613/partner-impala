@@ -262,6 +262,30 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function pluralize(count, singular, plural = `${singular}s`) {
+    return `${Number(count || 0).toLocaleString()} ${Number(count || 0) === 1 ? singular : plural}`;
+  }
+
+  function formatRebuildSummary(results = []) {
+    const byName = new Map(results.map((result) => [result.name, result]));
+    const audio = byName.get("audio");
+    const video = byName.get("video");
+    const parts = [];
+
+    if (audio) {
+      parts.push(`Audio: ${pluralize(audio.records, "track")}`);
+    }
+
+    if (video) {
+      const videoTitleCount = Number.isFinite(Number(video.titleCount))
+        ? Number(video.titleCount)
+        : Number(video.records || 0);
+      parts.push(`Video: ${pluralize(videoTitleCount, "title")}`);
+    }
+
+    return parts.join(". ");
+  }
+
   function scheduleRebuildStatusCheck() {
     if (rebuildStatusTimer) {
       clearTimeout(rebuildStatusTimer);
@@ -290,10 +314,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (status?.status === "completed") {
-      const summary = (status.results || [])
-        .map((result) => `${result.name}: ${Number(result.records || 0).toLocaleString()}`)
-        .join(", ");
-      setRebuildStatus(summary ? `Rebuilt ${summary}.` : "Index rebuild completed.");
+      const summary = formatRebuildSummary(status.results || []);
+      setRebuildStatus(summary || "Index rebuild completed.");
       folderCache.clear();
       return;
     }
@@ -1132,7 +1154,10 @@ document.addEventListener("DOMContentLoaded", () => {
     playlistRegistry.forEach((playlist) => {
       const option = document.createElement("option");
       option.value = playlist.id;
-      option.textContent = `${isLocalServicePlaylist(playlist) ? "L " : ""}${playlist.name}`;
+      option.textContent = `${playlist.name}${isLocalServicePlaylist(playlist) ? " (Local)" : ""}`;
+      if (isLocalServicePlaylist(playlist)) {
+        option.title = "Local Library Companion playlist";
+      }
       option.selected = playlist.id === currentPlaylistId;
       editorPlaylistSelector.appendChild(option);
     });

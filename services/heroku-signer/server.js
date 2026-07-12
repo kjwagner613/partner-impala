@@ -76,7 +76,8 @@ const libraryIndexScopes = [
     prefix: normalizeScanPrefix(
       process.env.S4_INDEX_VIDEO_PREFIX ?? (s4VideoBucket ? "" : "video/")
     ),
-    indexKey: process.env.S4_VIDEO_INDEX_KEY || "indexes/video.ndjson"
+    indexKey: process.env.S4_VIDEO_INDEX_KEY || "indexes/video.ndjson",
+    excludedPrefixes: ["indexes/", ...privateVideoPrefixes]
   }
 ];
 const libraryIndexCache = createLibraryIndexCache({
@@ -1092,6 +1093,7 @@ function getIndexRebuildStatus() {
     results: indexRebuildState.results.map((result) => ({
       name: result.name,
       records: result.records,
+      titleCount: result.titleCount ?? null,
       generatedAt: result.generatedAt
     })),
     error: indexRebuildState.error

@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Impala Streamer Library</title>
-  <link rel="stylesheet" href="styles.css?v=local-helper-20260705c" />
+  <link rel="stylesheet" href="styles.css?v=ui-polish-20260712a" />
   <link rel="icon" href="./assets/ddMusic.ico" />
 </head>
 
@@ -19,14 +19,14 @@
         <div class="titles-row">
           <h1 id="playlist-title">Playlist Editor</h1>
           <div class="song-list-links">
-            <a class="song-list-back" href="index.html">Player Rtn</a>
+            <a class="song-list-back" href="index.html">Go to Player</a>
             <div class="rebuild-index-control">
               <button type="button" id="rebuild-index-btn" class="rebuild-index-button" hidden>Re-Index</button>
-              <span id="rebuild-index-status" class="rebuild-index-status" aria-live="polite"></span>
             </div>
             <a class="song-list-back" href="preferences.html">Settings</a>
           </div>
         </div>
+        <div id="rebuild-index-status" class="rebuild-index-status" aria-live="polite"></div>
         <div id="library-status" class="editor-message page-auth-status" aria-live="polite"></div>
       </div>
       <div id="editor-message" class="editor-message" aria-live="polite"></div>
@@ -152,7 +152,7 @@
   <script src="dialog-prompts.js?v=dialog-theme-20260626"></script>
   <script src="playlist-store.js"></script>
   <script src="track-selection-store.js"></script>
-  <script src="songlist.js?v=local-helper-20260705c"></script>
+  <script src="songlist.js?v=ui-polish-20260712a"></script>
 </body>
 
 </html>

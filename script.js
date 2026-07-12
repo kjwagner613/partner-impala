@@ -32,6 +32,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const accountLink = document.getElementById("account-link");
   const diagnosticsButton = document.getElementById("diagnostics-btn");
   const aboutTitle = document.getElementById("impala-title");
+  const aboutLink = document.getElementById("about-link");
   const aboutDialog = document.getElementById("about-dialog");
   const aboutCloseButton = document.getElementById("about-close");
   const diagnosticsDialog = document.getElementById("diagnostics-dialog");
@@ -439,7 +440,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     if (accountLink) {
-      accountLink.textContent = isLoggedIn ? "Account" : "Sign In";
+      accountLink.textContent = isLoggedIn ? "Current User" : "Sign In";
       accountLink.classList.toggle("is-authorized", isLoggedIn);
       accountLink.title = isLoggedIn
         ? `Signed in as ${authSession.displayName || authSession.username}`
@@ -962,7 +963,10 @@ document.addEventListener("DOMContentLoaded", () => {
     playlistRegistry.forEach((playlist) => {
       const option = document.createElement("option");
       option.value = playlist.id;
-      option.textContent = `${isLocalServicePlaylist(playlist) ? "L " : ""}${playlist.name}`;
+      option.textContent = `${playlist.name}${isLocalServicePlaylist(playlist) ? " (Local)" : ""}`;
+      if (isLocalServicePlaylist(playlist)) {
+        option.title = "Local Library Companion playlist";
+      }
       option.selected = playlist.id === selectedPlaylistId;
       playlistSelector.appendChild(option);
     });
@@ -1629,6 +1633,7 @@ transportButtons.forEach((button) => {
   });
 
   aboutTitle?.addEventListener("click", openAboutDialog);
+  aboutLink?.addEventListener("click", openAboutDialog);
   aboutCloseButton?.addEventListener("click", () => aboutDialog?.close());
   aboutDialog?.addEventListener("click", (event) => {
     if (event.target === aboutDialog) aboutDialog.close();
