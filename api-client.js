@@ -35,7 +35,7 @@
         targetSelector: ".hero-meta",
         needsPrivateAccess: true
       });
-      throw new Error("Please go to Account and sign in. Your private library session expired.");
+      throw new Error("Please sign in. Your private library session expired.");
     }
 
     if (!response.ok) {

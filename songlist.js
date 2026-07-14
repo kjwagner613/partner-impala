@@ -25,6 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const libraryCurrentHeading = document.getElementById("library-current-heading");
   const libraryPlayHint = document.getElementById("library-play-hint");
   const libraryCurrentTitle = document.getElementById("library-current-title");
+  const libraryPreviewHeading = document.getElementById("library-preview-heading");
   const libraryPreviewTitle = document.getElementById("library-preview-title");
   const libraryTracksHeading = document.getElementById("library-tracks-heading");
   const libraryTracksTitle = document.getElementById("library-tracks-title");
@@ -235,7 +236,7 @@ document.addEventListener("DOMContentLoaded", () => {
         targetSelector: ".titles-row",
         needsPrivateAccess: true
       });
-      throw new Error("Please go to Account and sign in. Your private library session expired.");
+      throw new Error("Please sign in. Your private library session expired.");
     }
 
     if (!response.ok) {
@@ -394,6 +395,28 @@ document.addEventListener("DOMContentLoaded", () => {
       : segments;
 
     return displaySegments.length ? `/${displaySegments.join("/")}` : "/";
+  }
+
+  function getParentPrefix(prefix) {
+    const normalizedPath = String(prefix || "").replace(/^\/+/, "").replace(/\/+$/, "");
+    if (!normalizedPath) {
+      return "";
+    }
+
+    const slashIndex = normalizedPath.lastIndexOf("/");
+    return slashIndex >= 0 ? `${normalizedPath.slice(0, slashIndex)}/` : "";
+  }
+
+  function isCloudVideoMode() {
+    return libraryBrowseMode === "video" && currentLibrarySource === "s4";
+  }
+
+  function createVideoBackEntry() {
+    return {
+      type: "folder",
+      name: "Back",
+      prefix: getParentPrefix(currentPrefix)
+    };
   }
 
   function stripTrackNumberPrefix(value) {
@@ -2282,7 +2305,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    const queueName = "Video Playback Queue";
+    const queueName = "Playback Queue";
     const existingQueue = getCustomPlaylists().find((playlist) => playlist.name === queueName);
     const playlistId = existingQueue ? existingQueue.id : PlaylistStore.createCustomPlaylist(queueName);
     const safeStartIndex = Number.isInteger(startIndex)
@@ -2307,33 +2330,73 @@ document.addEventListener("DOMContentLoaded", () => {
     window.location.href = "index.html";
   }
 
+  function playVideoEntryFromEntries(entries, entry) {
+    const playableEntries = Array.isArray(entries)
+      ? entries.filter((candidate) => candidate && candidate.type === "file")
+      : [];
+    const entryKey = String(entry?.objectKey || entry?.file || "");
+    const startIndex = playableEntries.findIndex((candidate) => (
+      String(candidate.objectKey || candidate.file || "") === entryKey
+    ));
+
+    playVideoFromHere(entries, startIndex >= 0 ? startIndex : 0);
+  }
+
+  function openVideoFolder(prefix) {
+    currentPrefix = String(prefix || "");
+    selectedArtistPrefix = "";
+    selectedAlbumPrefix = "";
+    previewEntries = [];
+    trackEntries = [];
+    renderPreviewPane();
+    renderTracksPane();
+    loadCurrentLevel({ force: true });
+  }
+
   function renderLibraryPath() {
     const modeLabel = libraryBrowseMode === "video" ? "Video" : "Audio";
     const isVideoMode = libraryBrowseMode === "video";
+    const isCloudVideo = isCloudVideoMode();
     const isLocalJsonLibrary = currentLibrarySource === "local-json";
 
     if (libraryCurrentHeading) {
-      libraryCurrentHeading.textContent = isVideoMode ? "Videos" : "Artists";
+      libraryCurrentHeading.textContent = isCloudVideo
+        ? (currentPrefix ? "Folder" : "Titles")
+        : (isVideoMode ? "Videos" : "Artists");
     }
     if (libraryPlayHint) {
       libraryPlayHint.hidden = !isVideoMode;
+      libraryPlayHint.textContent = isCloudVideo
+        ? "Click a folder to open. Click a video to play."
+        : "Click on title to play";
+    }
+    if (libraryPreviewHeading) {
+      libraryPreviewHeading.textContent = isCloudVideo ? "Folders" : (isVideoMode ? "Preview" : "Albums");
     }
 
     libraryCurrentTitle.textContent = isLocalJsonLibrary
       ? `Local ${modeLabel}`
-      : (isVideoMode ? "All Videos" : "Select an artist");
+      : (isCloudVideo
+        ? (currentPrefix ? getLibraryPathLabel(currentPrefix) : "All Titles")
+        : (isVideoMode ? "All Videos" : "Select an artist"));
     libraryPreviewTitle.textContent = isLocalJsonLibrary
       ? "JSON manifest"
-      : (selectedArtistPrefix
+      : (isCloudVideo
+        ? "Open folders in the title list"
+        : (selectedArtistPrefix
         ? getLibraryPathLabel(selectedArtistPrefix)
-        : "Choose an artist above");
+        : (isVideoMode ? "Choose a title above" : "Choose an artist above")));
     if (libraryTracksHeading) {
-      libraryTracksHeading.textContent = selectedAlbumPrefix ? "Tracks" : "Album";
+      libraryTracksHeading.textContent = isCloudVideo
+        ? "Videos"
+        : (isVideoMode ? "Episodes" : (selectedAlbumPrefix ? "Tracks" : "Album"));
     }
     if (libraryTracksTitle) {
-      libraryTracksTitle.textContent = selectedAlbumPrefix
+      libraryTracksTitle.textContent = isCloudVideo
+        ? "Click a video to play"
+        : (selectedAlbumPrefix
         ? getLibraryPathLabel(selectedAlbumPrefix)
-        : "Select Album to display tracks";
+        : (isVideoMode ? "Select a season to display episodes" : "Select Album to display tracks"));
     }
   }
 
@@ -2352,8 +2415,7 @@ document.addEventListener("DOMContentLoaded", () => {
       isSelected = false,
       hideNavigationActions = false,
       onSelect,
-      onOpen,
-      entryIndex = 0
+      onOpen
     } = options;
     const playlist = getCurrentPlaylist();
     const canAddToCurrent = Boolean(playlist && playlist.kind === "custom" && !importLoading);
@@ -2428,7 +2490,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderLibraryEntries(target, entries, options = {}) {
-    const { folderClickAction = "preview", selectedPrefix = "", isArtistRow = false, hideSubtitle = false } = options;
+    const {
+      folderClickAction = "preview",
+      selectedPrefix = "",
+      isArtistRow = false,
+      hideSubtitle = false,
+      openFolderOnRowClick = false,
+      suppressFolderActions = false
+    } = options;
     target.innerHTML = "";
 
     if (!entries.length) {
@@ -2443,6 +2512,16 @@ document.addEventListener("DOMContentLoaded", () => {
       const item = document.createElement("div");
       const isSelected = entry.type === "folder" && entry.prefix === selectedPrefix;
       item.className = `library-song${isSelected ? " is-selected" : ""}${isArtistRow ? " library-artist-item" : ""}`;
+      if (openFolderOnRowClick && entry.type === "folder") {
+        item.classList.add("is-clickable-folder");
+        item.addEventListener("click", () => {
+          if (folderClickAction === "open") {
+            options.onOpen?.(entry.prefix);
+          } else {
+            options.onSelect?.(entry.prefix);
+          }
+        });
+      }
 
       const body = document.createElement("div");
       body.className = "library-song-body";
@@ -2457,11 +2536,12 @@ document.addEventListener("DOMContentLoaded", () => {
       const subtitle = document.createElement("span");
       if (entry.type === "folder") {
         subtitle.textContent = getLibraryPathLabel(entry.prefix);
-        copy.addEventListener("click", () => {
+        copy.addEventListener("click", (event) => {
+          event.stopPropagation();
           if (folderClickAction === "open") {
-            options.onOpen(entry.prefix);
+            options.onOpen?.(entry.prefix);
           } else {
-            options.onSelect(entry.prefix);
+            options.onSelect?.(entry.prefix);
           }
         });
       } else {
@@ -2469,7 +2549,8 @@ document.addEventListener("DOMContentLoaded", () => {
           ? `${entry.artist || "Unknown artist"} • ${entry.album}`
           : (entry.artist || "Unknown artist");
         if (options.onFileClick) {
-          copy.addEventListener("click", () => {
+          copy.addEventListener("click", (event) => {
+            event.stopPropagation();
             options.onFileClick(entry, index);
           });
         }
@@ -2484,13 +2565,14 @@ document.addEventListener("DOMContentLoaded", () => {
       } else if (options.enableFileStar && entry.type === "file") {
         body.classList.add("library-song-body-with-star");
         body.appendChild(createLibrarySelectionButton(createPlaylistSongFromLibraryEntry(entry, currentPlaylistId, index), index));
+      } else if (suppressFolderActions && entry.type === "folder") {
+        // Folder rows are already direct navigation controls in cloud video mode.
       } else if (!isArtistRow) {
         body.appendChild(createLibraryEntryActions(entry, {
           isSelected,
           hideNavigationActions: options.hideNavigationActions || false,
           onSelect: options.onSelect,
-          onOpen: options.onOpen,
-          entryIndex: index
+          onOpen: options.onOpen
         }));
       }
       item.appendChild(body);
@@ -2532,6 +2614,7 @@ document.addEventListener("DOMContentLoaded", () => {
           currentEntries = visibleEntries;
           renderLibraryEntries(libraryCurrentList, visibleEntries, {
             hideNavigationActions: true,
+            enableFileStar: true,
             onFileClick: (_, rowIndex) => playVideoFromHere(visibleEntries, rowIndex)
           });
         } else {
@@ -2578,6 +2661,7 @@ document.addEventListener("DOMContentLoaded", () => {
           const visibleEntries = filterEntriesBySearch(currentEntries);
           renderLibraryEntries(libraryCurrentList, visibleEntries, {
             hideNavigationActions: true,
+            enableFileStar: true,
             onFileClick: (_, rowIndex) => playVideoFromHere(visibleEntries, rowIndex)
           });
         } else {
@@ -2630,7 +2714,7 @@ document.addEventListener("DOMContentLoaded", () => {
       renderLibraryEntries(libraryCurrentList, []);
       renderPreviewPane();
       renderTracksPane();
-      setLibraryStatus("Please go to Account and sign in to browse the private cloud library.");
+      setLibraryStatus("Please sign in to browse the private cloud library.");
       authNotice?.render?.({
         targetSelector: ".titles-row",
         needsPrivateAccess: true
@@ -2645,34 +2729,26 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       let payload;
 
-      if (libraryBrowseMode === "video") {
-        currentPrefix = "";
-        payload = {
-          prefix: "",
-          entries: await fetchAllTracksForPrefix("", {
-            force,
-            searchTerm: librarySearchTerm
-          })
-        };
+      if (!currentPrefix) {
+        const resolvedRoot = await resolveRootPayloadForMode(libraryBrowseMode, {
+          force,
+          searchTerm: librarySearchTerm
+        });
+        currentPrefix = resolvedRoot.prefix;
+        payload = resolvedRoot.payload;
       } else {
-        if (!currentPrefix) {
-          const resolvedRoot = await resolveRootPayloadForMode(libraryBrowseMode, {
-            force,
-            searchTerm: librarySearchTerm
-          });
-          currentPrefix = resolvedRoot.prefix;
-          payload = resolvedRoot.payload;
-        } else {
-          payload = await fetchFolderEntries(currentPrefix, {
-            force,
-            searchTerm: librarySearchTerm
-          });
-        }
+        payload = await fetchFolderEntries(currentPrefix, {
+          force,
+          searchTerm: librarySearchTerm
+        });
       }
 
       currentEntries = payload.entries;
       if (currentLibrarySource !== "local-json" && libraryBrowseMode !== "video") {
         currentEntries = currentEntries.filter((entry) => entry.type === "folder");
+      }
+      if (isCloudVideoMode() && currentPrefix) {
+        currentEntries = [createVideoBackEntry(), ...currentEntries];
       }
 
       if (hasSearchTerm && libraryBrowseMode !== "video") {
@@ -2686,8 +2762,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (libraryBrowseMode === "video") {
         const visibleEntries = filterEntriesBySearch(currentEntries);
         renderLibraryEntries(libraryCurrentList, visibleEntries, {
-          hideNavigationActions: true,
-          onFileClick: (_, rowIndex) => playVideoFromHere(visibleEntries, rowIndex)
+          folderClickAction: "open",
+          openFolderOnRowClick: true,
+          suppressFolderActions: true,
+          enableFileStar: true,
+          onSelect: openVideoFolder,
+          onOpen: openVideoFolder,
+          onFileClick: (entry) => playVideoEntryFromEntries(visibleEntries, entry)
         });
       } else {
         renderLibraryEntries(libraryCurrentList, currentEntries, {
@@ -2731,7 +2812,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       const payload = await fetchFolderEntries(prefix, { force });
-      previewEntries = payload.entries.filter((entry) => entry.type === "folder");
+      previewEntries = libraryBrowseMode === "video"
+        ? payload.entries
+        : payload.entries.filter((entry) => entry.type === "folder");
       trackEntries = [];
       selectedAlbumPrefix = "";
       renderPreviewPane();
@@ -2776,10 +2859,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderPreviewPane(showLoading = false) {
     renderLibraryPath();
-    if (libraryBrowseMode === "video") {
-      renderLibraryEmptyState(libraryPreviewList, "Video mode uses the single list on the left.");
+    if (isCloudVideoMode()) {
+      renderLibraryEmptyState(
+        libraryPreviewList,
+        currentPrefix ? "Use the folder list to open seasons or videos." : "Open a title in the Titles list."
+      );
       return;
     }
+
     if (currentLibrarySource === "local-json") {
       renderLibraryEmptyState(
         libraryPreviewList,
@@ -2791,7 +2878,12 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (!selectedArtistPrefix) {
-      renderLibraryEmptyState(libraryPreviewList, "Choose an artist above to see albums.");
+      renderLibraryEmptyState(
+        libraryPreviewList,
+        libraryBrowseMode === "video"
+          ? "Choose a title above to see seasons or videos."
+          : "Choose an artist above to see albums."
+      );
       return;
     }
 
@@ -2800,30 +2892,38 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    renderLibraryEntries(libraryPreviewList, filterEntriesBySearch(previewEntries), {
+    const visibleEntries = filterEntriesBySearch(previewEntries);
+    renderLibraryEntries(libraryPreviewList, visibleEntries, {
       folderClickAction: "preview",
       selectedPrefix: selectedAlbumPrefix,
       hideSubtitle: true,
-      hideNavigationActions: true,
-      enableFolderStar: true,
+      hideNavigationActions: libraryBrowseMode !== "video",
+      enableFolderStar: libraryBrowseMode !== "video",
       onSelect: selectAlbum,
-      onOpen: openAlbum
+      onOpen: openAlbum,
+      openFolderOnRowClick: libraryBrowseMode === "video",
+      onFileClick: (entry) => playVideoEntryFromEntries(visibleEntries, entry)
     });
   }
 
   function renderTracksPane(showLoading = false) {
     renderLibraryPath();
-    if (libraryBrowseMode === "video") {
-      renderLibraryEmptyState(libraryTracksList, "Use Play from here on a video to start playback.");
+    if (isCloudVideoMode()) {
+      renderLibraryEmptyState(libraryTracksList, "Select a video file to play.");
       return;
     }
+
     if (currentLibrarySource === "local-json") {
       renderLibraryEmptyState(libraryTracksList, "Tracks from local JSON appear in the Albums column.");
       return;
     }
 
     if (!selectedAlbumPrefix) {
-      libraryTracksList.innerHTML = "";
+      if (libraryBrowseMode === "video") {
+        renderLibraryEmptyState(libraryTracksList, "Select a season to see episodes.");
+      } else {
+        libraryTracksList.innerHTML = "";
+      }
       return;
     }
 
@@ -2832,13 +2932,15 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    renderLibraryEntries(libraryTracksList, filterEntriesBySearch(trackEntries), {
+    const visibleEntries = filterEntriesBySearch(trackEntries);
+    renderLibraryEntries(libraryTracksList, visibleEntries, {
       folderClickAction: "open",
       hideSubtitle: true,
-      hideNavigationActions: true,
-      enableFileStar: true,
+      hideNavigationActions: libraryBrowseMode !== "video",
+      enableFileStar: libraryBrowseMode !== "video",
       onSelect: selectAlbum,
-      onOpen: openAlbum
+      onOpen: openAlbum,
+      onFileClick: (entry) => playVideoEntryFromEntries(visibleEntries, entry)
     });
   }
 
@@ -2947,10 +3049,23 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       } else {
         const visibleEntries = filterEntriesBySearch(currentEntries);
-        renderLibraryEntries(libraryCurrentList, visibleEntries, {
-          hideNavigationActions: true,
-          onFileClick: (_, rowIndex) => playVideoFromHere(visibleEntries, rowIndex)
-        });
+        if (isCloudVideoMode()) {
+          renderLibraryEntries(libraryCurrentList, visibleEntries, {
+            folderClickAction: "open",
+            openFolderOnRowClick: true,
+            suppressFolderActions: true,
+            enableFileStar: true,
+            onSelect: openVideoFolder,
+            onOpen: openVideoFolder,
+            onFileClick: (entry) => playVideoEntryFromEntries(visibleEntries, entry)
+          });
+        } else {
+          renderLibraryEntries(libraryCurrentList, visibleEntries, {
+            hideNavigationActions: true,
+            enableFileStar: true,
+            onFileClick: (_, rowIndex) => playVideoFromHere(visibleEntries, rowIndex)
+          });
+        }
       }
 
       renderPreviewPane();
@@ -2975,6 +3090,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const visibleEntries = filterEntriesBySearch(currentEntries);
         renderLibraryEntries(libraryCurrentList, visibleEntries, {
           hideNavigationActions: true,
+          enableFileStar: true,
           onFileClick: (_, rowIndex) => playVideoFromHere(visibleEntries, rowIndex)
         });
         renderPreviewPane();

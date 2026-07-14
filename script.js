@@ -1748,12 +1748,6 @@ transportButtons.forEach((button) => {
         4: "The signed media URL did not return playable media."
       };
       const message = messageMap[errorCode] || "Unable to load media.";
-      lastPlayerError = message;
-      console.error(`${label} element error:`, {
-        errorCode,
-        mediaPath,
-        currentSrc: mediaElement.currentSrc
-      });
 
       const retryPosition = Math.max(
         mediaElement.currentTime || 0,
@@ -1766,14 +1760,31 @@ transportButtons.forEach((button) => {
 
       if (canRetry) {
         errorRetryCount += 1;
+        lastPlayerError = "";
+        activeMediaDebug.recovery = {
+          status: "retrying",
+          reason: message,
+          retry: errorRetryCount,
+          retryLimit: ERROR_RETRY_LIMIT,
+          resumePosition: Math.round(retryPosition),
+          mediaPath
+        };
         updateDisplayText("Reconnecting");
-        updateAuthUi("Video connection dropped. Reconnecting...");
+        showPlayerToast("Network interrupted. Retrying from last position...");
+        publishDiagnostics();
+        console.warn(`${label} network interruption; retrying media load.`, activeMediaDebug.recovery);
         window.setTimeout(() => {
           playSong(currentSongIndex, true, { resumePosition: retryPosition });
         }, 700);
         return;
       }
 
+      lastPlayerError = message;
+      console.error(`${label} element error:`, {
+        errorCode,
+        mediaPath,
+        currentSrc: mediaElement.currentSrc
+      });
       updateDisplayText("Playback Error");
       persistPlayerState("paused");
       updateAuthUi(message);

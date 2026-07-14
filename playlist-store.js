@@ -23,6 +23,14 @@ const PlaylistStore = (() => {
     }
   ];
 
+  function areBuiltInPlaylistsEnabled() {
+    if (window.ImpalaConfig?.areBuiltInPlaylistsEnabled) {
+      return window.ImpalaConfig.areBuiltInPlaylistsEnabled();
+    }
+
+    return playerConfig.builtInPlaylistsEnabled === true;
+  }
+
   function cloneSong(song, fallbackId) {
     const source = song && typeof song === "object" ? song : {};
     return {
@@ -245,6 +253,10 @@ const PlaylistStore = (() => {
   }
 
   function getBuiltInPlaylists() {
+    if (!areBuiltInPlaylistsEnabled()) {
+      return [];
+    }
+
     return builtInDefinitions.map((definition) => {
       const savedPlayStates = getBuiltInPlayStates(definition.id);
       const songsWithState = definition.source()
