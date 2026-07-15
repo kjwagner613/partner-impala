@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Impala Streamer Preferences</title>
-  <link rel="stylesheet" href="styles.css?v=settings-polish-20260713a" />
+  <link rel="stylesheet" href="styles.css?v=usability-20260714a" />
   <link rel="icon" href="./assets/ddMusic.ico" />
 </head>
 
@@ -21,6 +21,7 @@
           <h1>User Preferences</h1>
         </div>
         <div class="song-list-links">
+          <button type="button" id="settings-reset-btn" class="song-list-back prefs-reset-all-btn">Reset Settings</button>
           <a class="song-list-back" href="index.html">Back to Player</a>
           <a class="song-list-back" href="songlist.html">Song List</a>
         </div>
@@ -60,9 +61,22 @@
         </div>
 
         <div class="prefs-control">
-          <label for="medallion-src-input">Medallion Image Path or URL</label>
-          <input id="medallion-src-input" type="text" placeholder="assets/vortexFireUs.png or https://..." />
-          <p class="prefs-hint">Use a local path like assets/your-image.png, or an external image URL.</p>
+          <label for="medallion-file-input">Medallion Image</label>
+          <input id="medallion-file-input" type="file" accept="image/png,image/jpeg,image/webp" />
+          <p class="prefs-hint">Drop or choose a square PNG, JPG, or WebP. 256x256 is ideal.</p>
+        </div>
+
+        <details class="prefs-details prefs-compact-details">
+          <summary>Advanced image path</summary>
+          <div class="prefs-control">
+            <label for="medallion-src-input">Medallion Image Path or URL</label>
+            <input id="medallion-src-input" type="text" placeholder="assets/vortexFireUs.png or https://..." />
+            <p class="prefs-hint">Use only when the image is already hosted or already included with this Impala instance.</p>
+          </div>
+        </details>
+
+        <div class="prefs-medallion-preview">
+          <img id="medallion-preview-img" src="assets/ddMusic.ico" alt="Current medallion preview" />
         </div>
 
         <div class="prefs-actions">
@@ -85,7 +99,7 @@
 
       <section class="prefs-panel" aria-labelledby="local-helper-heading">
         <h2 id="local-helper-heading">Local Library Companion</h2>
-        <p>Optional: use a small helper running on this PC to browse and play a local library organized as Artist / Album / Tracks. Cloud library access is unchanged when this is off.</p>
+        <p>Optional: use a small helper running on this PC to browse and play local music and video organized like the cloud library. Cloud library access is unchanged when this is off.</p>
 
         <label class="prefs-toggle" for="local-helper-enabled-input">
           <input id="local-helper-enabled-input" type="checkbox" />
@@ -93,9 +107,9 @@
         </label>
 
         <div class="prefs-control">
-          <label for="local-helper-root-input">Music Folder</label>
+          <label for="local-helper-root-input">Media Folder</label>
           <input id="local-helper-root-input" type="text" placeholder="C:\Users\YourName\Music" />
-          <p class="prefs-hint">Expected structure: Artist folder, Album folder, then tracks.</p>
+          <p class="prefs-hint">Music: Artist folder, Album folder, then tracks. Video: title folder, optional season folder, then videos.</p>
         </div>
 
         <details class="prefs-details">
@@ -220,7 +234,7 @@
   <script src="track-selection-store.js"></script>
   <script src="player-state-store.js"></script>
   <script src="identity-backup.js?v=backup-status-20260626"></script>
-  <script src="preferences.js?v=local-helper-20260705b"></script>
+  <script src="preferences.js?v=usability-20260714a"></script>
 </body>
 
 </html>

@@ -125,7 +125,6 @@ body {
 .library-panel {
   display: grid;
   min-width: 0;
-  align-content: start;
   gap: 0.75rem;
   padding: 0.9rem;
   border-radius: 16px;
@@ -134,6 +133,7 @@ body {
 }
 
 .playlist-panel {
+  grid-template-rows: auto auto minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -157,7 +157,8 @@ body {
 }
 
 .playlist-panel #song-list {
-  height: min(105vh, 980px);
+  height: 100%;
+  min-height: 24rem;
   max-height: none;
   overflow-y: auto;
   overflow-x: hidden;
@@ -167,8 +168,8 @@ body {
 }
 
 .playlist-panel #song-list.is-collapsed {
-  height: auto;
-  max-height: 24rem;
+  height: 100%;
+  max-height: none;
 }
 
 .playlist-panel #song-list::-webkit-scrollbar {
@@ -178,7 +179,7 @@ body {
 
 .selected-tracks-panel {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: 1fr;
   gap: 0.55rem;
   align-items: center;
   padding: 0.65rem 0.72rem;
@@ -191,11 +192,12 @@ body {
   color: var(--muted);
   font-size: 0.84rem;
   white-space: nowrap;
+  text-align: center;
 }
 
 .selected-tracks-actions {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(5.6rem, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.4rem;
 }
 
@@ -225,6 +227,26 @@ body {
   color: #fff4e2;
   font-size: 0.72rem;
   line-height: 1.2;
+}
+
+.prefs-reset-all-btn {
+  font: inherit;
+  cursor: pointer;
+}
+
+.prefs-medallion-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.prefs-medallion-preview img {
+  width: 72px;
+  height: 72px;
+  border-radius: 999px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 195, 111, 0.28);
 }
 
 .playlist-expand-btn[hidden] {
@@ -1743,10 +1765,11 @@ body.is-audio-mode #audioPlayer {
 .song-list-container .rebuild-index-button {
   box-sizing: border-box;
   margin: 0;
-  padding: 0.68rem 0.9rem;
+  padding: 0.58rem 0.76rem;
   background: linear-gradient(135deg, #a9d8b9, var(--button-end));
   border-color: rgba(169, 216, 185, 0.45);
   box-shadow: 0 8px 18px rgba(93, 147, 118, 0.2);
+  font-size: 0.82rem;
 }
 
 .song-list-container .rebuild-index-button:hover:not(:disabled) {
@@ -1759,8 +1782,9 @@ body.is-audio-mode #audioPlayer {
 }
 
 .rebuild-index-control {
-  display: grid;
-  justify-items: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   gap: 0.25rem;
   min-width: 0;
 }
@@ -2499,6 +2523,11 @@ body.is-video-mode .library-song-select span {
     max-height: 72vh;
   }
 
+  .playlist-panel #song-list.is-collapsed {
+    height: auto;
+    max-height: 24rem;
+  }
+
   .editor-columns {
     grid-template-columns: 1fr;
   }
@@ -2691,7 +2720,7 @@ body.is-video-mode .library-song-select span {
 
   .song-list-links {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
     width: 100%;
     justify-content: stretch;
     flex-wrap: nowrap;

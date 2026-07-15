@@ -262,7 +262,7 @@ app.get("/api/admin/rebuild-index", requireAuth, requireAdmin, (_request, respon
   response.json(getIndexRebuildStatus());
 });
 
-app.post("/api/admin/rebuild-index", requireAuth, requireAdmin, (_request, response) => {
+app.post("/api/admin/rebuild-index", requireAuth, requireAdmin, (request, response) => {
   if (indexRebuildState.status === "running") {
     response.status(202).json({
       accepted: false,
@@ -272,8 +272,9 @@ app.post("/api/admin/rebuild-index", requireAuth, requireAdmin, (_request, respo
     return;
   }
 
+  const mediaScope = parseOptionalMediaScope(request.query.scope);
   const rebuildId = crypto.randomUUID();
-  startIndexRebuild(rebuildId);
+  startIndexRebuild(rebuildId, mediaScope);
   response.status(202).json({
     accepted: true,
     message: "Index rebuild started.",
@@ -750,6 +751,11 @@ function parseMediaScope(value) {
   return String(value || "").trim().toLowerCase() === "video" ? "video" : "audio";
 }
 
+function parseOptionalMediaScope(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "audio" || normalized === "video" ? normalized : "";
+}
+
 function getBucketForScope(scope) {
   if (scope === "video" && s4VideoBucket) {
     return s4VideoBucket;
@@ -1048,7 +1054,10 @@ function requireAdmin(request, response, next) {
   next();
 }
 
-function startIndexRebuild(rebuildId) {
+function startIndexRebuild(rebuildId, mediaScope = "") {
+  const scopes = mediaScope
+    ? libraryIndexScopes.filter((scope) => scope.name === mediaScope)
+    : libraryIndexScopes;
   indexRebuildState.id = rebuildId;
   indexRebuildState.status = "running";
   indexRebuildState.currentScope = null;
@@ -1059,7 +1068,7 @@ function startIndexRebuild(rebuildId) {
 
   void buildLibraryIndexes({
     s3Client,
-    scopes: libraryIndexScopes,
+    scopes,
     onProgress(event) {
       indexRebuildState.currentScope = event.phase === "building" ? event.scope : null;
       if (event.result) {

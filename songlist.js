@@ -39,7 +39,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const selectedTracksNewButton = document.getElementById("selected-tracks-new-btn");
   const selectedTracksClearButton = document.getElementById("selected-tracks-clear-btn");
   const playlistExpandButton = document.getElementById("playlist-expand-btn");
-  const rebuildIndexButton = document.getElementById("rebuild-index-btn");
+  const rebuildAudioIndexButton = document.getElementById("rebuild-audio-index-btn");
+  const rebuildVideoIndexButton = document.getElementById("rebuild-video-index-btn");
   const rebuildIndexStatus = document.getElementById("rebuild-index-status");
   const authNotice = window.ImpalaAuthNotice;
 
@@ -73,6 +74,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let librarySearchDebounceHandle = null;
   let dragListListenersBound = false;
   let rebuildStatusTimer = null;
+  let activeRebuildScope = "";
   let playlistExpanded = false;
   let artistScrollbarDrag = null;
   let localServiceTracks = [];
@@ -299,13 +301,21 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderRebuildStatus(status) {
-    if (!rebuildIndexButton) {
+    const rebuildButtons = [rebuildAudioIndexButton, rebuildVideoIndexButton].filter(Boolean);
+    if (!rebuildButtons.length) {
       return;
     }
 
     const isRunning = status?.status === "running";
-    rebuildIndexButton.disabled = isRunning;
-    rebuildIndexButton.textContent = isRunning ? "Re-Indexing..." : "Re-Index";
+    rebuildButtons.forEach((button) => {
+      button.disabled = isRunning;
+    });
+    if (rebuildAudioIndexButton) {
+      rebuildAudioIndexButton.textContent = isRunning && activeRebuildScope === "audio" ? "Indexing..." : "Audio Index";
+    }
+    if (rebuildVideoIndexButton) {
+      rebuildVideoIndexButton.textContent = isRunning && activeRebuildScope === "video" ? "Indexing..." : "Video Index";
+    }
 
     if (isRunning) {
       const scope = status.currentScope ? ` ${status.currentScope}` : "";
@@ -318,11 +328,13 @@ document.addEventListener("DOMContentLoaded", () => {
       const summary = formatRebuildSummary(status.results || []);
       setRebuildStatus(summary || "Index rebuild completed.");
       folderCache.clear();
+      activeRebuildScope = "";
       return;
     }
 
     if (status?.status === "failed") {
       setRebuildStatus(status.error || "Index rebuild failed.");
+      activeRebuildScope = "";
       return;
     }
 
@@ -334,16 +346,18 @@ document.addEventListener("DOMContentLoaded", () => {
       const status = await apiRequest("/api/admin/rebuild-index");
       renderRebuildStatus(status);
     } catch (error) {
-      if (rebuildIndexButton) {
-        rebuildIndexButton.disabled = false;
-        rebuildIndexButton.textContent = "Re-Index";
-      }
+      [rebuildAudioIndexButton, rebuildVideoIndexButton].filter(Boolean).forEach((button) => {
+        button.disabled = false;
+      });
+      if (rebuildAudioIndexButton) rebuildAudioIndexButton.textContent = "Audio Index";
+      if (rebuildVideoIndexButton) rebuildVideoIndexButton.textContent = "Video Index";
       setRebuildStatus(error.message || "Unable to check rebuild status.");
     }
   }
 
   async function initializeRebuildControl() {
-    if (!rebuildIndexButton || !getApiBaseUrl()) {
+    const rebuildButtons = [rebuildAudioIndexButton, rebuildVideoIndexButton].filter(Boolean);
+    if (!rebuildButtons.length || !getApiBaseUrl()) {
       return;
     }
 
@@ -353,31 +367,45 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      rebuildIndexButton.hidden = false;
+      rebuildButtons.forEach((button) => {
+        button.hidden = false;
+      });
       await refreshRebuildStatus();
     } catch {
-      rebuildIndexButton.hidden = true;
+      rebuildButtons.forEach((button) => {
+        button.hidden = true;
+      });
     }
   }
 
-  async function requestIndexRebuild() {
+  async function requestIndexRebuild(scope) {
+    const normalizedScope = scope === "video" ? "video" : "audio";
+    const label = normalizedScope === "video" ? "video" : "audio";
     const confirmed = window.confirm(
-      "Rebuild the complete audio and video indexes now? This may take several minutes."
+      `Rebuild the ${label} index now?`
     );
     if (!confirmed) {
       return;
     }
 
-    rebuildIndexButton.disabled = true;
-    rebuildIndexButton.textContent = "Starting...";
-    setRebuildStatus("Starting index rebuild...");
+    activeRebuildScope = normalizedScope;
+    [rebuildAudioIndexButton, rebuildVideoIndexButton].filter(Boolean).forEach((button) => {
+      button.disabled = true;
+    });
+    if (normalizedScope === "audio" && rebuildAudioIndexButton) rebuildAudioIndexButton.textContent = "Starting...";
+    if (normalizedScope === "video" && rebuildVideoIndexButton) rebuildVideoIndexButton.textContent = "Starting...";
+    setRebuildStatus(`Starting ${label} index rebuild...`);
 
     try {
-      const status = await apiRequest("/api/admin/rebuild-index", { method: "POST" });
+      const status = await apiRequest(`/api/admin/rebuild-index?scope=${encodeURIComponent(normalizedScope)}`, { method: "POST" });
       renderRebuildStatus(status);
     } catch (error) {
-      rebuildIndexButton.disabled = false;
-      rebuildIndexButton.textContent = "Re-Index";
+      [rebuildAudioIndexButton, rebuildVideoIndexButton].filter(Boolean).forEach((button) => {
+        button.disabled = false;
+      });
+      if (rebuildAudioIndexButton) rebuildAudioIndexButton.textContent = "Audio Index";
+      if (rebuildVideoIndexButton) rebuildVideoIndexButton.textContent = "Video Index";
+      activeRebuildScope = "";
       setRebuildStatus(error.message || "Unable to start index rebuild.");
     }
   }
@@ -415,7 +443,8 @@ document.addEventListener("DOMContentLoaded", () => {
     return {
       type: "folder",
       name: "Back",
-      prefix: getParentPrefix(currentPrefix)
+      prefix: getParentPrefix(currentPrefix),
+      isNavigation: true
     };
   }
 
@@ -2353,6 +2382,29 @@ document.addEventListener("DOMContentLoaded", () => {
     loadCurrentLevel({ force: true });
   }
 
+  async function openVideoFolderOrPlaySingle(entry) {
+    if (!entry || entry.isNavigation) {
+      openVideoFolder(entry?.prefix || "");
+      return;
+    }
+
+    try {
+      setLibraryStatus("Opening title...");
+      const payload = await fetchFolderEntries(entry.prefix, { force: true });
+      const playableEntries = payload.entries.filter((candidate) => candidate.type === "file");
+      const childFolders = payload.entries.filter((candidate) => candidate.type === "folder");
+
+      if (playableEntries.length === 1 && childFolders.length === 0) {
+        playVideoFromHere(playableEntries, 0);
+        return;
+      }
+    } catch (error) {
+      setLibraryStatus(error.message || "Unable to inspect title. Opening folder.");
+    }
+
+    openVideoFolder(entry.prefix);
+  }
+
   function renderLibraryPath() {
     const modeLabel = libraryBrowseMode === "video" ? "Video" : "Audio";
     const isVideoMode = libraryBrowseMode === "video";
@@ -2516,7 +2568,7 @@ document.addEventListener("DOMContentLoaded", () => {
         item.classList.add("is-clickable-folder");
         item.addEventListener("click", () => {
           if (folderClickAction === "open") {
-            options.onOpen?.(entry.prefix);
+            options.onOpen?.(entry.prefix, entry);
           } else {
             options.onSelect?.(entry.prefix);
           }
@@ -2539,7 +2591,7 @@ document.addEventListener("DOMContentLoaded", () => {
         copy.addEventListener("click", (event) => {
           event.stopPropagation();
           if (folderClickAction === "open") {
-            options.onOpen?.(entry.prefix);
+            options.onOpen?.(entry.prefix, entry);
           } else {
             options.onSelect?.(entry.prefix);
           }
@@ -2629,7 +2681,7 @@ document.addEventListener("DOMContentLoaded", () => {
         renderTracksPane();
         setLibraryStatus(currentEntries.length
           ? "Using Local Library Companion."
-          : "Local Library Companion is connected, but no tracks are indexed. Open Settings and connect/rescan your Music Folder.");
+          : "Local Library Companion is connected, but no media items are indexed. Open Settings and connect/rescan your Media Folder.");
       } catch (error) {
         currentEntries = [];
         previewEntries = [];
@@ -2767,7 +2819,7 @@ document.addEventListener("DOMContentLoaded", () => {
           suppressFolderActions: true,
           enableFileStar: true,
           onSelect: openVideoFolder,
-          onOpen: openVideoFolder,
+          onOpen: (_prefix, entry) => openVideoFolderOrPlaySingle(entry),
           onFileClick: (entry) => playVideoEntryFromEntries(visibleEntries, entry)
         });
       } else {
@@ -3056,7 +3108,7 @@ document.addEventListener("DOMContentLoaded", () => {
             suppressFolderActions: true,
             enableFileStar: true,
             onSelect: openVideoFolder,
-            onOpen: openVideoFolder,
+            onOpen: (_prefix, entry) => openVideoFolderOrPlaySingle(entry),
             onFileClick: (entry) => playVideoEntryFromEntries(visibleEntries, entry)
           });
         } else {
@@ -3336,8 +3388,12 @@ document.addEventListener("DOMContentLoaded", () => {
     renderPage();
   });
 
-  rebuildIndexButton?.addEventListener("click", () => {
-    requestIndexRebuild();
+  rebuildAudioIndexButton?.addEventListener("click", () => {
+    requestIndexRebuild("audio");
+  });
+
+  rebuildVideoIndexButton?.addEventListener("click", () => {
+    requestIndexRebuild("video");
   });
 
   renderPage();

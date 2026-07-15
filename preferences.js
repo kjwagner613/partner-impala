@@ -7,9 +7,12 @@
   const previewContainer = document.getElementById("palette-preview");
   const previewName = document.getElementById("palette-preview-name");
   const customNoteInput = document.getElementById("custom-note-input");
+  const medallionFileInput = document.getElementById("medallion-file-input");
   const medallionSrcInput = document.getElementById("medallion-src-input");
+  const medallionPreviewImg = document.getElementById("medallion-preview-img");
   const customizeApplyButton = document.getElementById("customize-apply-btn");
   const customizeResetButton = document.getElementById("customize-reset-btn");
+  const settingsResetButton = document.getElementById("settings-reset-btn");
   const cloudApiUrlInput = document.getElementById("cloud-api-url-input");
   const cloudApiApplyButton = document.getElementById("cloud-api-apply-btn");
   const cloudApiResetButton = document.getElementById("cloud-api-reset-btn");
@@ -175,6 +178,59 @@
     setStatus("Palette reset to default.");
   }
 
+  function restoreAllSettingsToDefault() {
+    const confirmed = window.confirm(
+      "Restore Impala settings on this browser to defaults? Custom playlists and sign-in are not changed."
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    const nextPreferences = preferencesApi.resetPreferences();
+    refreshFormFromPreferences(nextPreferences);
+    setStatus("Settings restored to defaults for this browser.");
+  }
+
+  function readImageFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      if (!file || !/^image\/(png|jpe?g|webp)$/i.test(file.type || "")) {
+        reject(new Error("Choose a PNG, JPG, or WebP image."));
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("Unable to read the selected image."));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function applyMedallionFile() {
+    const file = medallionFileInput?.files?.[0] || null;
+    if (!file) {
+      return;
+    }
+
+    try {
+      const dataUrl = await readImageFileAsDataUrl(file);
+      const nextPreferences = preferencesApi.setCustomContent({
+        customNote: customNoteInput?.value,
+        medallionSrc: dataUrl
+      });
+
+      if (medallionSrcInput) {
+        medallionSrcInput.value = nextPreferences.medallionSrc;
+      }
+      if (medallionPreviewImg) {
+        medallionPreviewImg.src = nextPreferences.medallionSrc;
+      }
+
+      setStatus("Medallion image saved for this browser.");
+    } catch (error) {
+      setStatus(error.message || "Unable to save medallion image.");
+    }
+  }
+
   function applyCustomContent() {
     const nextPreferences = preferencesApi.setCustomContent({
       customNote: customNoteInput?.value,
@@ -187,6 +243,10 @@
 
     if (medallionSrcInput) {
       medallionSrcInput.value = nextPreferences.medallionSrc;
+    }
+
+    if (medallionPreviewImg) {
+      medallionPreviewImg.src = nextPreferences.medallionSrc;
     }
 
     setStatus("Player message and medallion updated.");
@@ -204,6 +264,10 @@
 
     if (medallionSrcInput) {
       medallionSrcInput.value = nextPreferences.medallionSrc;
+    }
+
+    if (medallionPreviewImg) {
+      medallionPreviewImg.src = nextPreferences.medallionSrc;
     }
 
     setStatus("Player message and medallion reset.");
@@ -445,8 +509,8 @@
       const payload = await response.json();
       const trackCount = Number.isFinite(payload?.trackCount) ? payload.trackCount : 0;
       setLocalHelperStatus(preferences.localHelperEnabled
-        ? `Connected to Local Library Companion. ${trackCount} track${trackCount === 1 ? "" : "s"} indexed.`
-        : `Helper is running with ${trackCount} indexed track${trackCount === 1 ? "" : "s"}, but Local Library Companion is off. Turn it on or use Connect / Rescan to activate it.`);
+        ? `Connected to Local Library Companion. ${trackCount} media item${trackCount === 1 ? "" : "s"} indexed.`
+        : `Helper is running with ${trackCount} indexed media item${trackCount === 1 ? "" : "s"}, but Local Library Companion is off. Turn it on or use Connect / Rescan to activate it.`);
       return { baseUrl, payload };
     } catch (error) {
       setLocalHelperStatus(`Local Library Companion is not running at ${baseUrl}. Download/start it, then check again.`);
@@ -461,7 +525,7 @@
     }
 
     if (!preferences.localHelperRoot) {
-      setLocalHelperStatus("Enter the Music Folder for this PC first.");
+      setLocalHelperStatus("Enter the Media Folder for this PC first.");
       return;
     }
 
@@ -483,7 +547,7 @@
 
       const payload = await response.json();
       const trackCount = Number.isFinite(payload?.trackCount) ? payload.trackCount : 0;
-      setLocalHelperStatus(`Local library connected and enabled. ${trackCount} track${trackCount === 1 ? "" : "s"} indexed. Open Library & Playlists to use it.`);
+      setLocalHelperStatus(`Local library connected and enabled. ${trackCount} media item${trackCount === 1 ? "" : "s"} indexed. Open Library & Playlists to use it.`);
     } catch (error) {
       setLocalHelperStatus(`Unable to connect local library: ${error?.message || "helper unavailable"}`);
     }
@@ -519,8 +583,8 @@
     });
   }
 
-  function refreshFormFromPreferences() {
-    const currentPreferences = preferencesApi.getPreferences();
+  function refreshFormFromPreferences(preferences) {
+    const currentPreferences = preferences || preferencesApi.getPreferences();
 
     if (paletteSelect) {
       paletteSelect.value = currentPreferences.palette;
@@ -533,6 +597,10 @@
 
     if (medallionSrcInput) {
       medallionSrcInput.value = currentPreferences.medallionSrc || "";
+    }
+
+    if (medallionPreviewImg) {
+      medallionPreviewImg.src = currentPreferences.medallionSrc || "assets/ddMusic.ico";
     }
 
     if (cloudApiUrlInput) {
@@ -744,8 +812,10 @@
 
     applyButton?.addEventListener("click", applySelectedPalette);
     resetButton?.addEventListener("click", resetToDefault);
+    settingsResetButton?.addEventListener("click", restoreAllSettingsToDefault);
     customizeApplyButton?.addEventListener("click", applyCustomContent);
     customizeResetButton?.addEventListener("click", resetCustomContent);
+    medallionFileInput?.addEventListener("change", applyMedallionFile);
     cloudApiApplyButton?.addEventListener("click", applyCloudConnection);
     cloudApiResetButton?.addEventListener("click", resetCloudConnection);
     cloudApiTestButton?.addEventListener("click", testCloudConnection);
