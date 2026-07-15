@@ -5,6 +5,8 @@ window.KW_PLAYER_CONFIG = window.KW_PLAYER_CONFIG || {
   authStorageKey: "impalaStreamer.authSession",
   playlistStoragePrefix: "impalaStreamer",
   instanceStorageId: "india1111",
+  builtInPlaylistsEnabled: true,
+  enabledBuiltInPlaylistIds: ["songsKw"],
   brandName: "Impala Streamer",
   appVersion: "1.0.0",
   appBuildDate: "2026.06.29",
