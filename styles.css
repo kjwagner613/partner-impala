@@ -2444,6 +2444,12 @@ body.is-audio-mode #audioPlayer {
   cursor: pointer;
 }
 
+.library-song.is-video-collection {
+  background: linear-gradient(135deg, rgba(126, 174, 230, 0.28), rgba(233, 246, 255, 0.08));
+  border-color: rgba(126, 174, 230, 0.58);
+  box-shadow: inset 0 0 0 1px rgba(233, 246, 255, 0.08);
+}
+
 .library-song-body {
   display: grid;
   min-width: 0;
@@ -3462,4 +3468,20 @@ body.is-video-mode .library-song-select span {
   .preferences-grid {
     grid-template-columns: 1fr;
   }
+}
+
+
+.no-bullets {
+  list-style: none;
+  padding-left: 0;
+  padding-left: 0;
+  margin-left: 2rem ;
+}
+
+.indent {
+  margin-left: 2rem;
+}
+
+.indent2 {
+  margin-left: 4rem;
 }

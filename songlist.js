@@ -79,6 +79,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let artistScrollbarDrag = null;
   let localServiceTracks = [];
   const folderCache = new Map();
+  const videoCollectionCache = new Map();
   const trackSelectionStore = window.TrackSelectionStore;
   const librarySelectionMap = new Map();
 
@@ -179,6 +180,7 @@ document.addEventListener("DOMContentLoaded", () => {
     previewEntries = [];
     trackEntries = [];
     folderCache.clear();
+    videoCollectionCache.clear();
     updateLibraryModeButtons();
     renderPreviewPane();
     loadCurrentLevel({ force: true });
@@ -325,10 +327,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (status?.status === "completed") {
+      const completedScope = activeRebuildScope;
       const summary = formatRebuildSummary(status.results || []);
       setRebuildStatus(summary || "Index rebuild completed.");
       folderCache.clear();
+      videoCollectionCache.clear();
       activeRebuildScope = "";
+      if (completedScope === libraryBrowseMode && !currentLoading) {
+        loadCurrentLevel({ force: true });
+      }
       return;
     }
 
@@ -446,6 +453,95 @@ document.addEventListener("DOMContentLoaded", () => {
       prefix: getParentPrefix(currentPrefix),
       isNavigation: true
     };
+  }
+
+  function getVideoRootFolderFromEntry(entry) {
+    const sourcePath = String(entry?.prefix || entry?.objectKey || entry?.file || "").replace(/^\/+/, "");
+    const segments = sourcePath.split("/").filter(Boolean);
+    if (!segments.length) {
+      return null;
+    }
+
+    const rootSegment = String(segments[0] || "").toLowerCase();
+    const contentSegments = ["video", "videos"].includes(rootSegment)
+      ? segments.slice(1)
+      : segments;
+    if (contentSegments.length <= 1) {
+      return null;
+    }
+
+    const rootPrefix = ["video", "videos"].includes(rootSegment) ? `${segments[0]}/` : "";
+    const titleName = contentSegments[0];
+    return {
+      type: "folder",
+      name: titleName,
+      prefix: `${rootPrefix}${titleName}/`,
+      isVideoCollection: true
+    };
+  }
+
+  function collapseVideoRootEntries(entries) {
+    if (!isCloudVideoMode() || currentPrefix || librarySearchTerm) {
+      return entries;
+    }
+
+    const collapsedEntries = new Map();
+    const directFileEntries = [];
+    (Array.isArray(entries) ? entries : []).forEach((entry) => {
+      const rootFolder = getVideoRootFolderFromEntry(entry);
+      if (rootFolder) {
+        if (!collapsedEntries.has(rootFolder.prefix)) {
+          collapsedEntries.set(rootFolder.prefix, rootFolder);
+        }
+        return;
+      }
+
+      if (entry?.type === "file") {
+        directFileEntries.push(entry);
+        return;
+      }
+
+      if (entry?.type === "folder" && !collapsedEntries.has(entry.prefix)) {
+        collapsedEntries.set(entry.prefix, entry);
+      }
+    });
+
+    return [...collapsedEntries.values(), ...directFileEntries]
+      .sort((left, right) => String(left.name || "").localeCompare(String(right.name || "")));
+  }
+
+  async function markVideoRootCollections(entries, options = {}) {
+    const { force = false } = options;
+    if (!isCloudVideoMode() || currentPrefix || librarySearchTerm) {
+      return entries;
+    }
+
+    const sourceEntries = Array.isArray(entries) ? entries : [];
+    return Promise.all(sourceEntries.map(async (entry) => {
+      if (entry?.type !== "folder" || entry.isNavigation || entry.isVideoCollection) {
+        return entry;
+      }
+
+      const cacheKey = String(entry.prefix || "");
+      if (!cacheKey) {
+        return entry;
+      }
+
+      if (!force && videoCollectionCache.has(cacheKey)) {
+        return videoCollectionCache.get(cacheKey)
+          ? { ...entry, isVideoCollection: true }
+          : entry;
+      }
+
+      try {
+        const payload = await fetchFolderEntries(cacheKey, { force });
+        const isCollection = payload.entries.some((candidate) => candidate.type === "folder");
+        videoCollectionCache.set(cacheKey, isCollection);
+        return isCollection ? { ...entry, isVideoCollection: true } : entry;
+      } catch {
+        return entry;
+      }
+    }));
   }
 
   function stripTrackNumberPrefix(value) {
@@ -2563,7 +2659,7 @@ document.addEventListener("DOMContentLoaded", () => {
     entries.forEach((entry, index) => {
       const item = document.createElement("div");
       const isSelected = entry.type === "folder" && entry.prefix === selectedPrefix;
-      item.className = `library-song${isSelected ? " is-selected" : ""}${isArtistRow ? " library-artist-item" : ""}`;
+      item.className = `library-song${isSelected ? " is-selected" : ""}${isArtistRow ? " library-artist-item" : ""}${entry.isVideoCollection ? " is-video-collection" : ""}`;
       if (openFolderOnRowClick && entry.type === "folder") {
         item.classList.add("is-clickable-folder");
         item.addEventListener("click", () => {
@@ -2795,7 +2891,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
 
-      currentEntries = payload.entries;
+      currentEntries = await markVideoRootCollections(collapseVideoRootEntries(payload.entries), { force });
       if (currentLibrarySource !== "local-json" && libraryBrowseMode !== "video") {
         currentEntries = currentEntries.filter((entry) => entry.type === "folder");
       }
@@ -3086,6 +3182,7 @@ document.addEventListener("DOMContentLoaded", () => {
       trackEntries = [];
       localServiceTracks = [];
       folderCache.clear();
+      videoCollectionCache.clear();
       loadCurrentLevel({ force: true });
       return;
     }

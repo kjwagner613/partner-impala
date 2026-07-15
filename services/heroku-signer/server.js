@@ -369,7 +369,7 @@ app.get("/api/library", requireAuth, async (request, response) => {
 
   if (
     requestedPrefix
-    && (!isAllowedForPrefixes(requestedPrefix, allowedPrefixes)
+    && (!isAllowedForLibraryPrefix(requestedPrefix, allowedPrefixes)
       || isExcludedForPrefixes(requestedPrefix, excludedPrefixes))
   ) {
     response.status(403).json({ error: "That library path is outside your allowed scope." });
@@ -782,6 +782,17 @@ function isAllowedForPrefixes(candidate, allowedPrefixes) {
   return allowedPrefixes.some((prefix) => String(candidate || "").startsWith(prefix));
 }
 
+function isAllowedForLibraryPrefix(candidate, allowedPrefixes) {
+  if (!allowedPrefixes.length) {
+    return true;
+  }
+
+  const normalizedCandidate = normalizePrefix(candidate);
+  return allowedPrefixes.some((prefix) => (
+    normalizedCandidate.startsWith(prefix) || prefix.startsWith(normalizedCandidate)
+  ));
+}
+
 function isExcludedForPrefixes(candidate, excludedPrefixes) {
   return excludedPrefixes.some((prefix) => String(candidate || "").startsWith(prefix));
 }
@@ -795,11 +806,30 @@ function getExcludedPrefixes(mediaScope, user) {
 }
 
 function buildVirtualFolders(prefixes) {
-  return [...new Set(prefixes.map((prefix) => normalizePrefix(prefix)).filter(Boolean))]
-    .map((prefix) => ({
-      name: getLeafName(prefix),
-      prefix
-    }));
+  const foldersByPrefix = new Map();
+  prefixes.map((prefix) => getVirtualRootFolder(prefix)).filter(Boolean).forEach((folder) => {
+    if (!foldersByPrefix.has(folder.prefix)) {
+      foldersByPrefix.set(folder.prefix, folder);
+    }
+  });
+  return [...foldersByPrefix.values()];
+}
+
+function getVirtualRootFolder(value) {
+  const normalizedPrefix = normalizePrefix(value);
+  const segments = normalizedPrefix.split("/").filter(Boolean);
+  if (!segments.length) {
+    return null;
+  }
+
+  const rootSegment = String(segments[0] || "").toLowerCase();
+  const hasMediaRoot = ["audio", "video", "videos"].includes(rootSegment);
+  const visibleIndex = hasMediaRoot && segments.length > 1 ? 1 : 0;
+  const folderPrefix = `${segments.slice(0, visibleIndex + 1).join("/")}/`;
+  return {
+    name: segments[visibleIndex],
+    prefix: folderPrefix
+  };
 }
 
 function getLeafName(path) {
